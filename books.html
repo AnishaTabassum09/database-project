@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Books - LibraryFlow</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; display: flex; }
+    .sidebar {
+      width: 220px;
+      background: #f7f7f7;
+      padding: 20px;
+      height: 100vh;
+      position: relative;
+    }
+    .sidebar h2 { margin-top: 0; }
+    .sidebar a {
+      display: block;
+      margin: 15px 0;
+      text-decoration: none;
+      color: #333;
+      font-weight: bold;
+    }
+    .content {
+      flex: 1;
+      padding: 20px;
+      background: #fafafa;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .header input[type="text"] {
+      padding: 8px;
+      width: 250px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .header button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .header button:hover {
+      background-color: #0056b3;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      text-align: left;
+    }
+    th {
+      background-color: #e8f0fe;
+    }
+    .action-btn {
+      padding: 6px 10px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .edit-btn {
+      background-color: #17a2b8;
+      color: white;
+      margin-right: 5px;
+    }
+    .edit-btn:hover {
+      background-color: #138496;
+    }
+    .delete-btn {
+      background-color: #dc3545;
+      color: white;
+    }
+    .delete-btn:hover {
+      background-color: #c82333;
+    }
+    .user-info {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+    }
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h2>LibraryFlow</h2>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/books">Books</a>
+    <a href="/users">Users</a>
+    <a href="/issuedbooks">IssuedBooks</a>
+    <a href="/reservation">Reservation</a>
+    <div class="user-info">
+      <p id="user-name">Loading...</p>
+      <small id="user-role"></small>
+    </div>
+  </div>
+  <div class="content">
+    <h1>Books Management</h1>
+    <div class="header">
+      <input type="text" id="searchInput" placeholder="Search books by title or author..." onkeyup="filterBooks()" />
+      <button onclick="addBook()">+ Add New Book</button>
+    </div>
+    <table id="booksTable">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Author</th>
+          <th>ISBN</th>
+          <th>Copies</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="bookBody">
+        <tr><td colspan="6" class="loading">Loading books...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    let books = [];
+
+    async function fetchBooks() {
+      try {
+        const tbody = document.getElementById('bookBody');
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading books...</td></tr>';
+        const res = await fetch('/api/books', {
+          headers: { 'Accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        books = await res.json();
+        renderBooks(books);
+      } catch (err) {
+        console.error('Error fetching books:', err);
+        alert('Failed to load books: ' + err.message);
+        document.getElementById('bookBody').innerHTML = '<tr><td colspan="6" class="loading">Failed to load books</td></tr>';
+      }
+    }
+
+    function renderBooks(list) {
+      const tbody = document.getElementById('bookBody');
+      tbody.innerHTML = '';
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">No books found</td></tr>';
+        return;
+      }
+      list.forEach(book => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${sanitize(book.title)}</td>
+          <td>${sanitize(book.author)}</td>
+          <td>${sanitize(book.isbn)}</td>
+          <td>${sanitize(book.copies)}</td>
+          <td>${sanitize(book.status)}</td>
+          <td>
+            <button class="action-btn edit-btn" onclick="editBook(${book.id})">Edit</button>
+            <button class="action-btn delete-btn" onclick="deleteBook(${book.id})">Delete</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function sanitize(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    async function addBook() {
+      const title = prompt("Enter book title:")?.trim();
+      if (!title) {
+        alert('Title is required');
+        return;
+      }
+      const author = prompt("Enter author name:")?.trim();
+      if (!author) {
+        alert('Author is required');
+        return;
+      }
+      const isbn = prompt("Enter ISBN:")?.trim();
+      if (!isbn) {
+        alert('ISBN is required');
+        return;
+      }
+      const copiesStr = prompt("Enter number of copies:", "1")?.trim();
+      const copies = parseInt(copiesStr);
+      if (isNaN(copies) || copies < 1) {
+        alert('Copies must be a valid number greater than 0');
+        return;
+      }
+      const status = prompt("Enter status (Available/Borrowed):", "Available")?.trim();
+      if (!['Available', 'Borrowed'].includes(status)) {
+        alert('Status must be Available or Borrowed');
+        return;
+      }
+
+      const newBook = { title, author, isbn, copies, status };
+      try {
+        const res = await fetch('/api/books', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(newBook)
+        });
+        if (res.ok) {
+          alert('Book added successfully');
+          await fetchBooks();
+        } else {
+          const msg = await res.text();
+          alert('Failed to add book: ' + msg);
+        }
+      } catch (err) {
+        console.error('Error adding book:', err);
+        alert('Error adding book: ' + err.message);
+      }
+    }
+
+    async function editBook(id) {
+      const book = books.find(b => b.id === id);
+      if (!book) {
+        alert('Book not found');
+        return;
+      }
+
+      const newTitle = prompt("Edit title:", book.title)?.trim();
+      if (!newTitle) {
+        alert('Title is required');
+        return;
+      }
+      const newAuthor = prompt("Edit author:", book.author)?.trim();
+      if (!newAuthor) {
+        alert('Author is required');
+        return;
+      }
+      const newIsbn = prompt("Edit ISBN:", book.isbn)?.trim();
+      if (!newIsbn) {
+        alert('ISBN is required');
+        return;
+      }
+      const copiesStr = prompt("Edit number of copies:", book.copies)?.trim();
+      const newCopies = parseInt(copiesStr);
+      if (isNaN(newCopies) || newCopies < 1) {
+        alert('Copies must be a valid number greater than 0');
+        return;
+      }
+      const newStatus = prompt("Edit status (Available/Borrowed):", book.status)?.trim();
+      if (!['Available', 'Borrowed'].includes(newStatus)) {
+        alert('Status must be Available or Borrowed');
+        return;
+      }
+
+      const updatedBook = { title: newTitle, author: newAuthor, isbn: newIsbn, copies: newCopies, status: newStatus };
+      try {
+        const res = await fetch(`/api/books/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(updatedBook)
+        });
+        if (res.ok) {
+          alert('Book updated successfully');
+          await fetchBooks();
+        } else {
+          const msg = await res.text();
+          alert('Failed to update book: ' + msg);
+        }
+      } catch (err) {
+        console.error('Error updating book:', err);
+        alert('Error updating book: ' + err.message);
+      }
+    }
+
+    async function deleteBook(id) {
+      if (!confirm("Are you sure you want to delete this book?")) return;
+      try {
+        const res = await fetch(`/api/books/${id}`, {
+          method: 'DELETE',
+          headers: { 'Accept': 'application/json' }
+        });
+        if (res.ok) {
+          alert('Book deleted successfully');
+          await fetchBooks();
+        } else {
+          const msg = await res.text();
+          alert('Failed to delete book: ' + msg);
+        }
+      } catch (err) {
+        console.error('Error deleting book:', err);
+        alert('Error deleting book: ' + err.message);
+      }
+    }
+
+    function filterBooks() {
+      const search = document.getElementById('searchInput').value.toLowerCase().trim();
+      const filtered = books.filter(book =>
+        book.title.toLowerCase().includes(search) ||
+        book.author.toLowerCase().includes(search)
+      );
+      renderBooks(filtered);
+    }
+
+    async function fetchUser() {
+      try {
+        const res = await fetch('/api/user', {
+          headers: { 'Accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const user = await res.json();
+        document.getElementById('user-name').innerText = user.fullname || 'Guest';
+        document.getElementById('user-role').innerText = user.accountType || '';
+      } catch (err) {
+        console.error('Error fetching user:', err);
+        document.getElementById('user-name').innerText = 'Guest';
+        document.getElementById('user-role').innerText = '';
+      }
+    }
+
+    // Initial load
+    fetchBooks();
+    fetchUser();
+  </script>
+</body>
+</html>
