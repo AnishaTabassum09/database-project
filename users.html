@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>User Management - LibraryFlow</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { margin: 0; font-family: sans-serif; display: flex; }
+    .sidebar {
+      width: 220px;
+      background: #f7f7f7;
+      padding: 20px;
+      height: 100vh;
+      position: relative;
+    }
+    .sidebar h2 { margin-top: 0; }
+    .sidebar a {
+      display: block;
+      margin: 15px 0;
+      text-decoration: none;
+      color: #333;
+      font-weight: bold;
+    }
+    .content {
+      flex: 1;
+      padding: 20px;
+      background: #fafafa;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .header input[type="text"] {
+      padding: 8px;
+      width: 250px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .header select {
+      padding: 8px;
+      margin-left: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .header button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .header button:hover {
+      background-color: #0056b3;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      text-align: left;
+    }
+    th {
+      background-color: #e8f0fe;
+    }
+    .action-btn {
+      padding: 6px 10px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .edit-btn {
+      background-color: #17a2b8;
+      color: white;
+      margin-right: 5px;
+    }
+    .edit-btn:hover {
+      background-color: #138496;
+    }
+    .delete-btn {
+      background-color: #dc3545;
+      color: white;
+    }
+    .delete-btn:hover {
+      background-color: #c82333;
+    }
+    .user-info {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+    }
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h2>LibraryFlow</h2>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/books">Books</a>
+    <a href="/users">Users</a>
+    <a href="/issuedbooks">IssuedBooks</a>
+    <a href="/reservation">Reservation</a>
+    <div class="user-info">
+      <p id="user-name">Loading...</p>
+      <small id="user-role"></small>
+    </div>
+  </div>
+  <div class="content">
+    <h1>User Management</h1>
+    <div class="header">
+      <input type="text" id="searchInput" placeholder="Search users by name or email..." onkeyup="filterUsers()" />
+      <select id="roleFilter" onchange="filterUsers()">
+        <option value="all">All Roles</option>
+        <option value="Student">Student</option>
+        <option value="Admin">Admin</option>
+      </select>
+      <button onclick="addUser()">+ Add New User</button>
+    </div>
+    <table id="usersTable">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="userBody">
+        <tr><td colspan="5" class="loading">Loading users...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    let users = [];
+
+    async function fetchUsers() {
+      try {
+        const tbody = document.getElementById('userBody');
+        tbody.innerHTML = '<tr><td colspan="5" class="loading">Loading users...</td></tr>';
+        const res = await fetch('/api/users', {
+          headers: { 'Accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        users = await res.json();
+        renderUsers(users);
+      } catch (err) {
+        console.error('Error fetching users:', err);
+        alert('Failed to load users: ' + err.message);
+        document.getElementById('userBody').innerHTML = '<tr><td colspan="5" class="loading">Failed to load users</td></tr>';
+      }
+    }
+
+    function renderUsers(list) {
+      const tbody = document.getElementById('userBody');
+      tbody.innerHTML = '';
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="loading">No users found</td></tr>';
+        return;
+      }
+      list.forEach(user => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${sanitize(user.fullname)}</td>
+          <td>${sanitize(user.email)}</td>
+          <td>${sanitize(user.account_type)}</td>
+          <td>${sanitize(user.status)}</td>
+          <td>
+            <button class="action-btn edit-btn" onclick="editUser(${user.id})">Edit</button>
+            <button class="action-btn delete-btn" onclick="deleteUser(${user.id})">Delete</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function sanitize(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    async function addUser() {
+      const fullname = prompt("Enter full name:")?.trim();
+      if (!fullname) {
+        alert('Full name is required');
+        return;
+      }
+      const email = prompt("Enter email:")?.trim();
+      if (!email || !email.includes('@')) {
+        alert('Valid email is required');
+        return;
+      }
+      const account_type = prompt("Enter role (Student/Admin):", "Student")?.trim();
+      if (!['Student', 'Admin'].includes(account_type)) {
+        alert('Role must be Student or Admin');
+        return;
+      }
+      const status = prompt("Enter status (Active/Inactive):", "Active")?.trim();
+      if (!['Active', 'Inactive'].includes(status)) {
+        alert('Status must be Active or Inactive');
+        return;
+      }
+
+      const newUser = { fullname, email, account_type, status };
+      try {
+        const res = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(newUser)
+        });
+        if (res.ok) {
+          alert('User added successfully');
+          await fetchUsers();
+        } else {
+          const msg = await res.text();
+          alert('Failed to add user: ' + msg);
+        }
+      } catch (err) {
+        console.error('Error adding user:', err);
+        alert('Error adding user: ' + err.message);
+      }
+    }
+
+    async function editUser(id) {
+      const user = users.find(u => u.id === id);
+      if (!user) {
+        alert('User not found');
+        return;
+      }
+
+      const newFullname = prompt("Edit full name:", user.fullname)?.trim();
+      if (!newFullname) {
+        alert('Full name is required');
+        return;
+      }
+      const newEmail = prompt("Edit email:", user.email)?.trim();
+      if (!newEmail || !newEmail.includes('@')) {
+        alert('Valid email is required');
+        return;
+      }
+      const newAccountType = prompt("Edit role (Student/Admin):", user.account_type)?.trim();
+      if (!['Student', 'Admin'].includes(newAccountType)) {
+        alert('Role must be Student or Admin');
+        return;
+      }
+      const newStatus = prompt("Edit status (Active/Inactive):", user.status)?.trim();
+      if (!['Active', 'Inactive'].includes(newStatus)) {
+        alert('Status must be Active or Inactive');
+        return;
+      }
+
+      const updatedUser = { fullname: newFullname, email: newEmail, account_type: newAccountType, status: newStatus };
+      try {
+        const res = await fetch(`/api/users/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(updatedUser)
+        });
+        if (res.ok) {
+          alert('User updated successfully');
+          await fetchUsers();
+        } else {
+          const msg = await res.text();
+          alert('Failed to update user: ' + msg);
+        }
+      } catch (err) {
+        console.error('Error updating user:', err);
+        alert('Error updating user: ' + err.message);
+      }
+    }
+
+    async function deleteUser(id) {
+      if (!confirm('Are you sure you want to delete this user?')) return;
+      try {
+        const res = await fetch(`/api/users/${id}`, {
+          method: 'DELETE',
+          headers: { 'Accept': 'application/json' }
+        });
+        if (res.ok) {
+          alert('User deleted successfully');
+          await fetchUsers();
+        } else {
+          const msg = await res.text();
+          alert('Failed to delete user: ' + msg);
+        }
+      } catch (err) {
+        console.error('Error deleting user:', err);
+        alert('Error deleting user: ' + err.message);
+      }
+    }
+
+    function filterUsers() {
+      const search = document.getElementById('searchInput').value.toLowerCase().trim();
+      const role = document.getElementById('roleFilter').value;
+      const filtered = users.filter(user => {
+        const matchesSearch = user.fullname.toLowerCase().includes(search) || user.email.toLowerCase().includes(search);
+        const matchesRole = (role === "all") || (user.account_type === role);
+        return matchesSearch && matchesRole;
+      });
+      renderUsers(filtered);
+    }
+
+    async function fetchLoggedInUser() {
+      try {
+        const res = await fetch('/api/user', {
+          headers: { 'Accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const user = await res.json();
+        document.getElementById('user-name').innerText = user.fullname || 'Guest';
+        document.getElementById('user-role').innerText = user.accountType || '';
+      } catch (err) {
+        console.error('Error fetching logged-in user:', err);
+        document.getElementById('user-name').innerText = 'Guest';
+        document.getElementById('user-role').innerText = '';
+      }
+    }
+
+    // Initial load
+    fetchUsers();
+    fetchLoggedInUser();
+  </script>
+</body>
+</html>
