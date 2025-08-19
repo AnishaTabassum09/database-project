@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Payments - LibraryFlow</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; display: flex; }
+    .sidebar {
+      width: 220px; background: #f7f7f7; padding: 20px; height: 100vh;
+    }
+    .sidebar a { display: block; padding: 10px; color: #333; text-decoration: none; }
+    .sidebar a:hover { background: #ddd; }
+    .sidebar a.active { background: #ccc; font-weight: bold; }
+    .content { flex: 1; padding: 20px; }
+
+    table {
+      width: 100%; border-collapse: collapse; margin-top: 20px;
+    }
+    table, th, td {
+      border: 1px solid #ccc;
+    }
+    th, td {
+      padding: 8px; text-align: left;
+    }
+    th { background: #f0f0f0; }
+    .form-container {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ccc;
+      background: #fafafa;
+      width: 400px;
+    }
+    .form-container input, .form-container select {
+      width: 100%;
+      padding: 8px;
+      margin: 5px 0;
+    }
+    .form-container button {
+      padding: 10px 15px;
+      background: #333;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    .form-container button:hover {
+      background: #555;
+    }
+    .delete-btn {
+      color: red;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h2>LibraryFlow</h2>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/books">Books</a>
+    <a href="/users">Users</a>
+    <a href="/issuedBooks">IssuedBooks</a>
+    <a href="/payments" class="active">Payments</a>
+  </div>
+
+  <div class="content">
+    <h1>Payments</h1>
+
+    <!-- Payment Form -->
+    <div class="form-container">
+      <h3>Add Payment</h3>
+      <form id="paymentForm">
+        <label for="issue_id">Issue ID</label>
+        <input type="number" id="issue_id" name="issue_id" required>
+
+        <label for="amount">Amount</label>
+        <input type="number" step="0.01" id="amount" name="amount" required>
+
+        <label for="is_paid">Is Paid?</label>
+        <select id="is_paid" name="is_paid" required>
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+
+        <label for="imposed_date">Imposed Date (optional)</label>
+        <input type="date" id="imposed_date" name="imposed_date">
+
+        <label for="paid_date">Paid Date (optional)</label>
+        <input type="date" id="paid_date" name="paid_date">
+
+        <button type="submit">Add Payment</button>
+      </form>
+    </div>
+
+    <!-- Payments Table -->
+    <h3>Payment Records</h3>
+    <table id="paymentsTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Issue ID</th>
+          <th>Amount</th>
+          <th>Is Paid</th>
+          <th>Imposed Date</th>
+          <th>Paid Date</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Filled dynamically -->
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    async function fetchPayments() {
+      const res = await fetch('/api/payments');
+      const data = await res.json();
+      const tbody = document.querySelector('#paymentsTable tbody');
+      tbody.innerHTML = '';
+
+      data.forEach(payment => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${payment.payments_id}</td>
+          <td>${payment.issue_id}</td>
+          <td>${payment.amount}</td>
+          <td>${payment.is_paid ? 'Yes' : 'No'}</td>
+          <td>${payment.imposed_date ? payment.imposed_date.split('T')[0] : ''}</td>
+          <td>${payment.paid_date ? payment.paid_date.split('T')[0] : ''}</td>
+          <td><span class="delete-btn" onclick="deletePayment(${payment.payments_id})">Delete</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('paymentForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const issue_id = parseInt(document.getElementById('issue_id').value);
+      const amount = parseFloat(document.getElementById('amount').value);
+      const is_paid = document.getElementById('is_paid').value === "true"; // convert to boolean
+      const imposed_date = document.getElementById('imposed_date').value || null;
+      const paid_date = document.getElementById('paid_date').value || null;
+
+      await fetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issue_id, amount, is_paid, imposed_date, paid_date })
+      });
+
+      e.target.reset();
+      fetchPayments();
+    });
+
+    async function deletePayment(id) {
+      await fetch(`/api/payments/${id}`, { method: 'DELETE' });
+      fetchPayments();
+    }
+
+    // Load payments on page load
+    fetchPayments();
+  </script>
+</body>
+</html>
