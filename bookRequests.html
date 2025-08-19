@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Book Requests - Admin Dashboard</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; display: flex; }
+    .sidebar {
+      width: 220px;
+      background: #f7f7f7;
+      padding: 20px;
+      height: 100vh;
+      position: relative;
+    }
+    .sidebar h2 { margin-top: 0; }
+    .sidebar a {
+      display: block;
+      margin: 15px 0;
+      text-decoration: none;
+      color: #333;
+      font-weight: bold;
+    }
+    .sidebar a.active {
+      color: #007bff;
+    }
+    .content {
+      flex: 1;
+      padding: 20px;
+      background: #fafafa;
+    }
+    h1 { margin-top: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      text-align: left;
+    }
+    th { background-color: #e8f0fe; }
+    tr:hover { background-color: #f1f1f1; }
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+    .status-pending { color: orange; font-weight: bold; }
+    .status-approved { color: green; font-weight: bold; }
+    .status-rejected { color: red; font-weight: bold; }
+    button {
+      padding: 6px 12px;
+      margin-right: 5px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .approve-btn { background-color: #28a745; color: #fff; }
+    .reject-btn { background-color: #dc3545; color: #fff; }
+    .approve-btn:hover { background-color: #218838; }
+    .reject-btn:hover { background-color: #c82333; }
+    .user-info {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+    }
+    .legend {
+      margin: 15px 0;
+      font-size: 14px;
+    }
+    .legend span { margin-right: 15px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h2>LibraryFlow</h2>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/books">Books</a>
+    <a href="/users">Users</a>
+    <a href="/issuedBooks">IssuedBooks</a>
+    <a href="/payments">Payments</a>
+    <a href="/bookRequests" class="active">BookRequests</a>
+    <div class="user-info">
+      <p id="user-name">Loading...</p>
+      <small id="user-role"></small>
+    </div>
+  </div>
+
+  <div class="content">
+    <h1>All Book Requests</h1>
+    <div class="legend">
+      <span class="status-pending">● Pending</span>
+      <span class="status-approved">● Approved</span>
+      <span class="status-rejected">● Rejected</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Title</th>
+          <th>Author</th>
+          <th>Request Date</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="requestBody">
+        <tr><td colspan="6" class="loading">Loading requests...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    // Fetch requests for admin
+    async function fetchRequests() {
+      try {
+        const tbody = document.getElementById('requestBody');
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading requests...</td></tr>';
+
+        const res = await fetch('/api/admin/requests', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+
+        const requests = await res.json();
+        renderRequests(requests);
+      } catch (err) {
+        console.error('Error fetching requests:', err);
+        document.getElementById('requestBody').innerHTML =
+          '<tr><td colspan="6" class="loading">Failed to load requests</td></tr>';
+        alert('Error loading requests: ' + err.message);
+      }
+    }
+
+    // Render requests table
+    function renderRequests(list) {
+      const tbody = document.getElementById('requestBody');
+      tbody.innerHTML = '';
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">No requests found</td></tr>';
+        return;
+      }
+      list.forEach(req => {
+        const status = req.status || 'Pending';
+        const statusClass = `status-${status.toLowerCase()}`;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${sanitize(req.user_name)}</td>
+          <td>${sanitize(req.title)}</td>
+          <td>${sanitize(req.author || '')}</td>
+          <td>${req.request_date ? new Date(req.request_date).toLocaleString() : ''}</td>
+          <td class="${statusClass}">${sanitize(status)}</td>
+          <td>
+            ${status.toLowerCase() === 'pending' ? `
+              <button class="approve-btn" onclick="updateStatus(${req.id}, 'Approved', this)">Approve</button>
+              <button class="reject-btn" onclick="updateStatus(${req.id}, 'Rejected', this)">Reject</button>
+            ` : ''}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Update request status
+    async function updateStatus(id, status, btn) {
+      if (!confirm(`Are you sure you want to mark this request as ${status}?`)) return;
+      try {
+        if (btn) btn.disabled = true;
+        const res = await fetch(`/api/admin/requests/${id}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ status })
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+
+        await fetchRequests(); // Refresh list
+      } catch (err) {
+        console.error('Error updating status:', err);
+        alert('Failed to update status: ' + err.message);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    // Sanitize HTML text
+    function sanitize(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    // Fetch admin info
+    async function fetchUser() {
+      try {
+        const res = await fetch('/api/user-dashboard', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        document.getElementById('user-name').innerText = data.user.fullname || 'Guest';
+        document.getElementById('user-role').innerText = data.user.accountType || '';
+      } catch (err) {
+        console.error('Error fetching user:', err);
+        document.getElementById('user-name').innerText = 'Guest';
+        document.getElementById('user-role').innerText = '';
+        alert('Failed to fetch user info: ' + err.message);
+      }
+    }
+
+    // Initial load
+    fetchRequests();
+    fetchUser();
+  </script>
+</body>
+</html>
