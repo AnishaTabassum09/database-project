@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>User Dashboard - LibraryFlow</title>
+  <link rel="stylesheet" href="userDashboard.css" />
+</head>
+<body>
+  <div class="sidebar">
+    <h2>LibraryFlow</h2>
+    <a href="/userDashboard">Dashboard</a>
+    <a href="/userbooks">User Books</a>
+    <a href="/requests" class="active">Requests</a>
+    <a href="/borrowedBooks">My Borrowed Books</a>
+    <a href="/finePayment">Fine Payment</a>
+    <a href="/feedback">Feedback</a>
+    <div class="user-info">
+      <p id="user-name">Loading...</p>
+      <small id="user-role"></small>
+    </div>
+  </div>
+
+  <div class="content">
+    <h1>My Dashboard</h1>
+
+    <!-- Requests Section -->
+    <section>
+      <h2>My Requests</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Book Title</th>
+            <th>Request Date</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="requests-list">
+          <!-- Requests will load here -->
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Borrowed Books Section -->
+    <section>
+      <h2>Borrowed Books</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Borrow Date</th>
+            <th>Due Date</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="borrowed-books-list">
+          <!-- Borrowed books will load here -->
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Fine Payment Section -->
+    <section>
+      <h2>Fine Payment</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Reason</th>
+            <th>Amount</th>
+            <th>Date Issued</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="fine-list">
+          <!-- Fines will load here -->
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Feedback Section -->
+    <section>
+      <h2>Feedback</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Feedback</th>
+            <th>Reply</th>
+          </tr>
+        </thead>
+        <tbody id="feedback-list">
+          <!-- Feedback will load here -->
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    async function fetchUserDashboardData() {
+      try {
+        const res = await fetch('/api/user-dashboard');
+        const data = await res.json();
+
+        // User Info
+        document.getElementById('user-name').innerText = data.user.fullname;
+        document.getElementById('user-role').innerText = data.user.accountType;
+
+        // Requests
+        const reqTable = document.getElementById('requests-list');
+        reqTable.innerHTML = '';
+        data.requests.forEach(req => {
+          reqTable.innerHTML += `
+            <tr>
+              <td>${req.bookTitle}</td>
+              <td>${req.requestDate}</td>
+              <td>${req.status}</td>
+            </tr>
+          `;
+        });
+
+        // Borrowed Books
+        const borrowedTable = document.getElementById('borrowed-books-list');
+        borrowedTable.innerHTML = '';
+        data.borrowedBooks.forEach(book => {
+          borrowedTable.innerHTML += `
+            <tr>
+              <td>${book.title}</td>
+              <td>${book.author}</td>
+              <td>${book.borrowDate}</td>
+              <td>${book.dueDate}</td>
+              <td>${book.status}</td>
+            </tr>
+          `;
+        });
+
+        // Fines
+        const fineTable = document.getElementById('fine-list');
+        fineTable.innerHTML = '';
+        data.fines.forEach(fine => {
+          fineTable.innerHTML += `
+            <tr>
+              <td>${fine.reason}</td>
+              <td>${fine.amount}</td>
+              <td>${fine.dateIssued}</td>
+              <td>${fine.status}</td>
+            </tr>
+          `;
+        });
+
+        // Feedback
+        const feedbackTable = document.getElementById('feedback-list');
+        feedbackTable.innerHTML = '';
+        data.feedback.forEach(fb => {
+          feedbackTable.innerHTML += `
+            <tr>
+              <td>${fb.date}</td>
+              <td>${fb.message}</td>
+              <td>${fb.reply || 'Pending'}</td>
+            </tr>
+          `;
+        });
+
+      } catch (err) {
+        console.error('Error loading user dashboard data:', err);
+      }
+    }
+
+    fetchUserDashboardData();
+  </script>
+</body>
+</html>
