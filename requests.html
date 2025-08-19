@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>My Book Requests - LibraryFlow</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; display: flex; }
+    .sidebar {
+      width: 220px;
+      background: #f7f7f7;
+      padding: 20px;
+      height: 100vh;
+      position: relative;
+    }
+    .sidebar h2 { margin-top: 0; }
+    .sidebar a {
+      display: block;
+      margin: 15px 0;
+      text-decoration: none;
+      color: #333;
+      font-weight: bold;
+    }
+    .sidebar a.active {
+      color: #007bff;
+    }
+    .content {
+      flex: 1;
+      padding: 20px;
+      background: #fafafa;
+    }
+    h1 { margin-top: 0; }
+    form {
+      margin-bottom: 20px;
+      background: #fff;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    form label {
+      display: block;
+      margin: 8px 0 4px;
+      font-weight: bold;
+    }
+    form input {
+      padding: 8px;
+      margin-right: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 95%;
+      margin-bottom: 10px;
+    }
+    form button {
+      padding: 8px 16px;
+      border: none;
+      background: #007bff;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    form button:hover { background: #0056b3; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      text-align: left;
+    }
+    th { background-color: #e8f0fe; }
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+    .status-pending { color: orange; font-weight: bold; }
+    .status-approved { color: green; font-weight: bold; }
+    .status-declined { color: red; font-weight: bold; }
+    .user-info {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h2>LibraryFlow</h2>
+    <a href="/userDashboard">Dashboard</a>
+    <a href="/userbooks">User Books</a>
+    <a href="/requests" class="active">Requests</a>
+    <a href="/borrowedBooks">My Borrowed Books</a>
+    <a href="/finePayment">Fine Payment</a>
+    <a href="/feedback">Feedback</a>
+    <div class="user-info">
+      <p id="user-name">Loading...</p>
+      <small id="user-role"></small>
+    </div>
+  </div>
+
+  <div class="content">
+    <h1>My Book Requests</h1>
+
+    <!-- Request Form -->
+    <form id="requestForm">
+      <label for="title">Book Title</label>
+      <input type="text" id="title" placeholder="Book Title" required />
+      <label for="author">Author</label>
+      <input type="text" id="author" placeholder="Author (optional)" />
+      <button type="submit">Request Book</button>
+    </form>
+
+    <!-- Requests Table -->
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Author</th>
+          <th>Request Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="requestBody">
+        <tr><td colspan="4" class="loading">Loading requests...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    // Fetch logged-in user info
+    async function fetchUser() {
+      try {
+        const res = await fetch('/api/user-dashboard', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        if (data.user) {
+          document.getElementById('user-name').innerText = data.user.fullname || 'Guest';
+          document.getElementById('user-role').innerText = data.user.accountType || '';
+        }
+      } catch (err) {
+        console.error('Error fetching user:', err);
+        document.getElementById('user-name').innerText = 'Guest';
+        document.getElementById('user-role').innerText = '';
+      }
+    }
+
+    // Fetch existing requests for the logged-in user
+    async function fetchRequests() {
+      try {
+        const tbody = document.getElementById('requestBody');
+        tbody.innerHTML = '<tr><td colspan="4" class="loading">Loading requests...</td></tr>';
+
+        const res = await fetch('/api/user-requests', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+
+        const requests = await res.json();
+        renderRequests(requests);
+      } catch (err) {
+        console.error('Error fetching requests:', err);
+        document.getElementById('requestBody').innerHTML =
+          '<tr><td colspan="4" class="loading">Failed to load requests</td></tr>';
+        alert('Error loading requests: ' + err.message);
+      }
+    }
+
+    // Render requests in the table
+    function renderRequests(list) {
+      const tbody = document.getElementById('requestBody');
+      tbody.innerHTML = '';
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="loading">No requests found</td></tr>';
+        return;
+      }
+      list.forEach(req => {
+        const tr = document.createElement('tr');
+        const statusClass = req.status ? req.status.toLowerCase().replace(/\s+/g, '-') : 'unknown';
+        tr.innerHTML = `
+          <td>${sanitize(req.title)}</td>
+          <td>${sanitize(req.author || '—')}</td>
+          <td>${req.request_date ? new Date(req.request_date).toLocaleString() : ''}</td>
+          <td class="status-${statusClass}">${sanitize(req.status || '')}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Handle new request submission
+    document.getElementById('requestForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = document.getElementById('title').value.trim();
+      const author = document.getElementById('author').value.trim();
+
+      if (!title) {
+        alert("Please enter a book title.");
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/user-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ title, author })
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+
+        // Reset form fields
+        document.getElementById('title').value = '';
+        document.getElementById('author').value = '';
+
+        // Reload requests
+        fetchRequests();
+      } catch (err) {
+        console.error('Error submitting request:', err);
+        alert('Failed to submit request: ' + err.message);
+      }
+    });
+
+    // Sanitize user input for safe rendering
+    function sanitize(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    // Initial load
+    fetchUser();
+    fetchRequests();
+  </script>
+</body>
+</html>
