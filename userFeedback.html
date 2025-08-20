@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Give Feedback - LibraryFlow</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; display: flex; }
+    .sidebar {
+      width: 220px;
+      background: #f7f7f7;
+      padding: 20px;
+      height: 100vh;
+      position: relative;
+    }
+    .sidebar h2 { margin-top: 0; }
+    .sidebar a {
+      display: block;
+      margin: 15px 0;
+      text-decoration: none;
+      color: #333;
+      font-weight: bold;
+    }
+    .sidebar a.active {
+      color: #007bff;
+    }
+    .content {
+      flex: 1;
+      padding: 20px;
+      background: #fafafa;
+    }
+    h1 { margin-top: 0; }
+    form {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      max-width: 400px;
+      margin-bottom: 30px;
+    }
+    form label { display: block; margin-bottom: 8px; font-weight: bold; }
+    form textarea, form select {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 15px;
+      resize: vertical;
+    }
+    form button {
+      background: #007bff;
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    form button:hover { background: #0056b3; }
+    .feedback-list {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      max-width: 600px;
+    }
+    .feedback-item {
+      border-bottom: 1px solid #eee;
+      padding: 12px 0;
+    }
+    .feedback-item:last-child { border-bottom: none; }
+    .feedback-rating {
+      color: #ffc107;
+      font-weight: bold;
+      margin-left: 8px;
+    }
+    .feedback-date {
+      color: #888;
+      font-size: 13px;
+      margin-left: 10px;
+    }
+    .user-info {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+    }
+    .success-msg {
+      color: green;
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+    .error-msg {
+      color: red;
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h2>LibraryFlow</h2>
+    <a href="/userDashboard">Dashboard</a>
+    <a href="/userbooks">User Books</a>
+    <a href="/requests">Requests</a>
+    <a href="/borrowedBooks">My Borrowed Books</a>
+    <a href="/finePayment">Fine Payment</a>
+    <a href="/feedback" class="active">Feedback</a>
+    <div class="user-info">
+      <p id="user-name">Loading...</p>
+      <small id="user-role"></small>
+    </div>
+  </div>
+
+  <div class="content">
+    <h1>Give Feedback</h1>
+    <form id="feedbackForm">
+      <div class="success-msg" id="successMsg" style="display:none;"></div>
+      <div class="error-msg" id="errorMsg" style="display:none;"></div>
+      <label for="feedback_text">Your Feedback</label>
+      <textarea id="feedback_text" name="feedback_text" rows="4" maxlength="1000" required></textarea>
+      <label for="rating">Rating</label>
+      <select id="rating" name="rating" required>
+        <option value="">Select rating</option>
+        <option value="1">1 - Very Poor</option>
+        <option value="2">2 - Poor</option>
+        <option value="3">3 - Average</option>
+        <option value="4">4 - Good</option>
+        <option value="5">5 - Excellent</option>
+      </select>
+      <button type="submit">Submit Feedback</button>
+    </form>
+
+    <div class="feedback-list" id="feedbackList">
+      <h2>Your Previous Feedback</h2>
+      <div id="feedbackItems">
+        <div class="feedback-item">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Fetch logged-in user info
+    async function fetchUser() {
+      try {
+        const res = await fetch('/api/user/dashboard', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+        if (!res.ok) throw new Error('Not logged in');
+        const data = await res.json();
+        document.getElementById('user-name').innerText = data.user.fullname || 'User';
+        document.getElementById('user-role').innerText = data.user.account_type || '';
+      } catch (err) {
+        document.getElementById('user-name').innerText = 'Guest';
+        document.getElementById('user-role').innerText = '';
+      }
+    }
+
+    // Fetch user's previous feedback
+    async function fetchFeedback() {
+      const feedbackItems = document.getElementById('feedbackItems');
+      feedbackItems.innerHTML = '<div class="feedback-item">Loading...</div>';
+      try {
+        const res = await fetch('/api/user/feedback', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+        if (!res.ok) throw new Error('Failed to fetch feedback');
+        const feedbacks = await res.json();
+        if (!feedbacks.length) {
+          feedbackItems.innerHTML = '<div class="feedback-item">No feedback yet.</div>';
+          return;
+        }
+        feedbackItems.innerHTML = '';
+        feedbacks.forEach(fb => {
+          const div = document.createElement('div');
+          div.className = 'feedback-item';
+          div.innerHTML = `
+            <span>${sanitize(fb.feedback_text)}</span>
+            <span class="feedback-rating">★ ${fb.rating}</span>
+            <span class="feedback-date">${new Date(fb.feedback_date).toLocaleString()}</span>
+          `;
+          feedbackItems.appendChild(div);
+        });
+      } catch (err) {
+        feedbackItems.innerHTML = '<div class="feedback-item">Failed to load feedback.</div>';
+      }
+    }
+
+    // Handle feedback form submission
+    document.getElementById('feedbackForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      document.getElementById('successMsg').style.display = 'none';
+      document.getElementById('errorMsg').style.display = 'none';
+
+      const feedback_text = document.getElementById('feedback_text').value.trim();
+      const rating = document.getElementById('rating').value;
+
+      if (!feedback_text || !rating) {
+        showError('Please provide feedback and rating.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/user/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ feedback_text, rating })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to submit feedback');
+        showSuccess('Feedback submitted successfully!');
+        document.getElementById('feedbackForm').reset();
+        fetchFeedback();
+      } catch (err) {
+        showError(err.message);
+      }
+    });
+
+    function showSuccess(msg) {
+      const el = document.getElementById('successMsg');
+      el.innerText = msg;
+      el.style.display = 'block';
+    }
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      el.innerText = msg;
+      el.style.display = 'block';
+    }
+    function sanitize(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    // Initial load
+    fetchUser();
+    fetchFeedback();
+  </script>
+</body>
+</html>
