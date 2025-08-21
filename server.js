@@ -15,7 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(
   session({
-    secret: '1234', // Change this in production
+    secret: '1234',
     resave: false,
     saveUninitialized: true,
     cookie: { secure: false },
@@ -34,6 +34,30 @@ app.get('/admin/requests', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/bookRequests.html'));
 });
 
+// Add this route for /bookRequests
+app.get('/bookRequests', (req, res) => {
+  if (!req.session.user || req.session.user.account_type !== 'admin') {
+    return res.redirect('/login');
+  }
+  res.sendFile(path.join(__dirname, '../frontend/bookRequests.html'));
+});
+
+// User feedback page
+app.get('/feedback', (req, res) => {
+  if (!req.session.user || req.session.user.account_type !== 'user') {
+    return res.redirect('/login');
+  }
+  res.sendFile(path.join(__dirname, '../frontend/userFeedback.html'));
+});
+
+// Admin feedback page
+app.get('/Feedback', (req, res) => {
+  console.log('Session user:', req.session.user); // <-- Debug line
+  if (!req.session.user || req.session.user.account_type !== 'admin') {
+    return res.redirect('/login');
+  }
+  res.sendFile(path.join(__dirname, '../frontend/Feedback.html'));
+});
 
 // ===================== Auth Pages =====================
 app.get('/signup', (req, res) => {
@@ -131,7 +155,9 @@ app.get('/api/dashboard-stats', async (req, res) => {
     const newUsers = await pool.query(
       "SELECT COUNT(*) FROM users WHERE created_at >= NOW() - interval '7 days'"
     );
-
+    const booksCurrentlyBorrowed = await pool.query(
+      'SELECT COUNT(*) FROM issuedBooks WHERE return_date IS NULL'
+    );
     const topBooks = await pool.query(`
       SELECT title, COUNT(*) AS borrow_count
       FROM issuedBooks
@@ -144,6 +170,7 @@ app.get('/api/dashboard-stats', async (req, res) => {
     res.json({
       totalBooks: totalBooks.rows[0].count,
       totalUsers: totalUsers.rows[0].count,
+      booksCurrentlyBorrowed: booksCurrentlyBorrowed.rows[0].count,
       issuedBooks: issuedBooks.rows[0].count,
       overdueBooks: overdueBooks.rows[0].count,
       newUsers: newUsers.rows[0].count,
@@ -638,7 +665,7 @@ app.delete('/api/payments/:id', async (req, res) => {
 // ===================== User Dashboard & Requests =====================
 
 // Get logged-in user info (for sidebar)
-app.get('/api/user-dashboard', async (req, res) => {
+app.get('/api/user/dashboard', async (req, res) => {
   try {
     if (!req.session.user) {
       return res.status(401).json({ error: 'Not logged in' });
@@ -650,8 +677,14 @@ app.get('/api/user-dashboard', async (req, res) => {
   }
 });
 
+// Add this route for /api/user-dashboard (for frontend compatibility)
+app.get('/api/user-dashboard', (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
+  res.json({ user: req.session.user });
+});
+
 // Get available books for users
-app.get('/api/userBooks', async (req, res) => {
+app.get('/api/user/books', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, title, author, isbn, copies, status
@@ -666,16 +699,16 @@ app.get('/api/userBooks', async (req, res) => {
 });
 
 // Request a book (user creates new request)
-app.post('/api/user-requests', async (req, res) => {
+app.post('/api/requests', async (req, res) => {
   try {
     if (!req.session.user) {
-      return res.status(401).json({ success: false, error: 'Not logged in' });
+      return res.status(401).json({ error: 'Not logged in' });
     }
 
     const { title, author } = req.body;
 
     if (!title || title.trim() === '') {
-      return res.status(400).json({ success: false, error: 'Book title is required' });
+      return res.status(400).json({ error: 'Book title is required' });
     }
 
     const insertRes = await pool.query(
@@ -689,15 +722,15 @@ app.post('/api/user-requests', async (req, res) => {
       ]
     );
 
-    res.json({ success: true, request: insertRes.rows[0] });
+    res.json(insertRes.rows[0]);
   } catch (err) {
     console.error('Error requesting book:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
 // Get requests for the logged-in user
-app.get('/api/user-requests', async (req, res) => {
+app.get('/api/requests', async (req, res) => {
   try {
     if (!req.session.user) {
       return res.status(401).json({ error: 'Not logged in' });
@@ -711,10 +744,104 @@ app.get('/api/user-requests', async (req, res) => {
       [req.session.user.id]
     );
 
-    res.json({ success: true, requests: result.rows });
+    res.json(result.rows);
   } catch (err) {
     console.error('Error fetching user requests:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ===================== FEEDBACK ROUTES =====================
+
+// User submits feedback (from user dashboard)
+app.post('/api/user/feedback', async (req, res) => {
+  try {
+    // Check if user is logged in and is a normal user
+    if (!req.session.user || req.session.user.account_type !== 'user') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { feedback_text, rating } = req.body;
+
+    // Validate feedback_text and rating
+    if (!feedback_text || !rating) {
+      return res.status(400).json({ error: 'Feedback text and rating are required.' });
+    }
+
+    const numericRating = Number(rating);
+    if (isNaN(numericRating) || numericRating < 1 || numericRating > 5) {
+      return res.status(400).json({ error: 'Rating must be a number between 1 and 5.' });
+    }
+
+    // Insert feedback into database
+    await pool.query(
+      `INSERT INTO feedback (users_id, feedback_text, rating, feedback_date)
+       VALUES ($1, $2, $3, NOW())`,
+      [req.session.user.id, feedback_text.trim(), numericRating]
+    );
+
+    res.json({ success: true, message: 'Feedback submitted successfully.' });
+  } catch (err) {
+    console.error('Error submitting feedback:', err);
+    res.status(500).json({ error: 'Server error while submitting feedback.' });
+  }
+});
+
+
+// User gets their own feedbacks
+app.get('/api/user/feedback', async (req, res) => {
+  try {
+    // Check if user is logged in and is a normal user
+    if (!req.session.user || req.session.user.account_type !== 'user') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Fetch feedback for the logged-in user
+    const result = await pool.query(
+      `SELECT feedback_id, feedback_text, rating, feedback_date
+       FROM feedback
+       WHERE users_id = $1
+       ORDER BY feedback_date DESC`,
+      [req.session.user.id]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching user feedback:', err);
+    res.status(500).json({ error: 'Server error while fetching feedback.' });
+  }
+});
+
+
+// Admin gets all feedbacks (for admin dashboard)
+app.get('/api/admin/feedback', async (req, res) => {
+  try {
+    // Check if user is logged in and is an admin
+    if (!req.session.user || req.session.user.account_type !== 'admin') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Fetch all feedback with user details for admin view
+    const result = await pool.query(
+      `SELECT f.feedback_id, f.users_id, u.fullname, f.feedback_text, f.rating, f.feedback_date
+       FROM feedback f
+       LEFT JOIN users u ON f.users_id = u.id
+       ORDER BY f.feedback_date DESC`
+    );
+
+    // Send only the fields needed for your table
+    const formattedData = result.rows.map(row => ({
+      users_id: row.users_id,
+      fullname: row.fullname || 'Unknown',
+      feedback_text: row.feedback_text,
+      rating: row.rating,
+      feedback_date: row.feedback_date
+    }));
+
+    res.json(formattedData);
+  } catch (err) {
+    console.error('Error fetching all feedback:', err);
+    res.status(500).json({ error: 'Server error while fetching all feedback.' });
   }
 });
 
@@ -723,7 +850,7 @@ app.get('/api/user-requests', async (req, res) => {
 // Get all book requests (admin view)
 app.get('/api/admin/requests', async (req, res) => {
   try {
-    if (!req.session.user || req.session.user.accountType !== 'admin') {
+    if (!req.session.user || req.session.user.account_type !== 'admin') {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -749,7 +876,7 @@ app.get('/api/admin/requests', async (req, res) => {
 // Update request status (Approve/Reject)
 app.post('/api/admin/requests/:id/status', async (req, res) => {
   try {
-    if (!req.session.user || req.session.user.accountType !== 'admin') {
+    if (!req.session.user || req.session.user.account_type !== 'admin') {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -772,12 +899,13 @@ app.post('/api/admin/requests/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'Request not found' });
     }
 
-    res.json({ success: true, request: updateRes.rows[0] });
+    res.json(updateRes.rows[0]);
   } catch (err) {
     console.error('Error updating request status:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 
 // ===================== User Info API =====================
 app.get('/api/user', (req, res) => {
