@@ -51,13 +51,14 @@ app.get('/feedback', (req, res) => {
 });
 
 // Admin feedback page
-app.get('/Feedback', (req, res) => {
-  console.log('Session user:', req.session.user); // <-- Debug line
+app.get('/adminFeedback', (req, res) => {
+  console.log('Session user:', req.session.user); // Debug line
   if (!req.session.user || req.session.user.account_type !== 'admin') {
     return res.redirect('/login');
   }
-  res.sendFile(path.join(__dirname, '../frontend/Feedback.html'));
+  res.sendFile(path.join(__dirname, '../frontend/adminFeedback.html'));
 });
+
 
 // ===================== Auth Pages =====================
 app.get('/signup', (req, res) => {
