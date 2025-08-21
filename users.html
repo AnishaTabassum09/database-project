@@ -110,7 +110,9 @@
     <a href="/books">Books</a>
     <a href="/users">Users</a>
     <a href="/issuedbooks">IssuedBooks</a>
-    <a href="/reservation">Reservation</a>
+    <a href="/payments">Payments</a>
+    <a href="/bookRequests">BookRequests</a>
+    <a href="/feedback">Feedback</a>
     <div class="user-info">
       <p id="user-name">Loading...</p>
       <small id="user-role"></small>
@@ -122,7 +124,7 @@
       <input type="text" id="searchInput" placeholder="Search users by name or email..." onkeyup="filterUsers()" />
       <select id="roleFilter" onchange="filterUsers()">
         <option value="all">All Roles</option>
-        <option value="Student">Student</option>
+        <option value="User">User</option>
         <option value="Admin">Admin</option>
       </select>
       <button onclick="addUser()">+ Add New User</button>
@@ -203,9 +205,9 @@
         alert('Valid email is required');
         return;
       }
-      const account_type = prompt("Enter role (Student/Admin):", "Student")?.trim();
-      if (!['Student', 'Admin'].includes(account_type)) {
-        alert('Role must be Student or Admin');
+      const account_type = prompt("Enter role (User/Admin):", "User")?.trim();
+      if (!['User', 'Admin'].includes(account_type)) {
+        alert('Role must be User or Admin');
         return;
       }
       const status = prompt("Enter status (Active/Inactive):", "Active")?.trim();
@@ -251,9 +253,9 @@
         alert('Valid email is required');
         return;
       }
-      const newAccountType = prompt("Edit role (Student/Admin):", user.account_type)?.trim();
-      if (!['Student', 'Admin'].includes(newAccountType)) {
-        alert('Role must be Student or Admin');
+      const newAccountType = prompt("Edit role (User/Admin):", user.account_type)?.trim();
+      if (!['User', 'Admin'].includes(newAccountType)) {
+        alert('Role must be User or Admin');
         return;
       }
       const newStatus = prompt("Edit status (Active/Inactive):", user.status)?.trim();
